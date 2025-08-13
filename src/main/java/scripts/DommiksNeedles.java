@@ -109,6 +109,12 @@ public class DommiksNeedles extends AbstractScript {
         if (Players.getLocal() == null) {
             return waitMedium();
         }
+        // More frequent short AFK pauses so it's visible
+        if (rand(0, 19) == 0) { // ~5% chance
+            int afk = rand(800, 2400);
+            log("Idling briefly: " + afk + "ms");
+            sleep(afk);
+        }
 
         // Needles stack; never bank for needles
 
@@ -128,10 +134,10 @@ public class DommiksNeedles extends AbstractScript {
                     hopWorld();
                     return waitMedium();
                 }
-                // Occasionally hover before buying
-                if (rand(0, 4) == 0) { try { item.hover(); } catch (Throwable ignored) {} sleep(rand(60, 180)); }
-                // Occasionally Buy 1 then Buy 5 next tick for variability
-                if (rand(0, 5) == 0) { item.interact("Buy 1"); sleep(rand(100, 200)); }
+                // More frequent slight pause before buying
+                if (rand(0, 1) == 0) { sleep(rand(80, 160)); }
+                // More frequent: Buy 1 then Buy 5 next tick
+                if (rand(0, 2) == 0) { item.interact("Buy 1"); sleep(rand(120, 220)); }
                 didBuy = item.interact("Buy 5");
                 if (!didBuy) didBuy = item.interact("Buy-5");
                 if (!didBuy) didBuy = item.interact("Buy Five");
@@ -210,8 +216,8 @@ public class DommiksNeedles extends AbstractScript {
             }
             return waitMedium();
         }
-        // Occasionally rotate camera slightly (API yaw/pitch integers)
-        if (rand(0, 24) == 0) {
+        // More frequent camera jitter
+        if (rand(0, 4) == 0) {
             try { org.dreambot.api.methods.input.Camera.rotateTo(rand(0, 2047), rand(320, 380)); } catch (Throwable ignored) {}
         }
         if (dommik.interact("Trade")) {
