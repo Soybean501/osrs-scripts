@@ -55,7 +55,7 @@ public class DommiksNeedles extends AbstractScript {
                     Class<?> cls = Class.forName(className);
                     try {
                         // Prefer static setSpeed(int)
-                        cls.getMethod("setSpeed", int.class).invoke(null, 2);
+                        cls.getMethod("setSpeed", int.class).invoke(null, 4);
                         break;
                     } catch (NoSuchMethodException ignored) {
                         // Try instance-based API: get() or instance() returning settings object
@@ -66,7 +66,7 @@ public class DommiksNeedles extends AbstractScript {
                                 try { instance = cls.getMethod("instance").invoke(null); } catch (NoSuchMethodException e) { /* ignore */ }
                             }
                             if (instance != null) {
-                                cls.getMethod("setSpeed", int.class).invoke(instance, 2);
+                                cls.getMethod("setSpeed", int.class).invoke(instance, 4);
                                 break;
                             }
                         } catch (Throwable ignored2) { /* continue to next candidate */ }
@@ -105,12 +105,8 @@ public class DommiksNeedles extends AbstractScript {
             if (remaining > 0) {
                 int before = Inventory.count(ITEM_NAME);
                 boolean didBuy;
-                // Prefer faster bulk action when we still need >=5; otherwise 1
-                if (remaining >= 5) {
-                    didBuy = Shop.purchaseFive(ITEM_NAME);
-                } else {
-                    didBuy = Shop.purchaseOne(ITEM_NAME);
-                }
+                // Always prefer Buy 5 to reduce click count
+                didBuy = Shop.purchaseFive(ITEM_NAME);
                 if (didBuy) {
                     sleepUntil(() -> Inventory.count(ITEM_NAME) > before, 50, 1200);
                     int gained = Math.max(0, Inventory.count(ITEM_NAME) - before);
