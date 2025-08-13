@@ -2,28 +2,29 @@ package scripts;
 
 import org.dreambot.api.Client;
 import org.dreambot.api.methods.container.impl.Inventory;
+import org.dreambot.api.methods.container.impl.Shop;
 import org.dreambot.api.methods.container.impl.bank.Bank;
 import org.dreambot.api.methods.container.impl.bank.BankLocation;
-import org.dreambot.api.methods.container.impl.Shop;
 import org.dreambot.api.methods.interactive.NPCs;
 import org.dreambot.api.methods.interactive.Players;
 import org.dreambot.api.methods.map.Tile;
 import org.dreambot.api.methods.walking.impl.Walking;
+import org.dreambot.api.methods.world.World;
+import org.dreambot.api.methods.world.Worlds;
+import org.dreambot.api.methods.worldhopper.WorldHopper;
 import org.dreambot.api.script.AbstractScript;
 import org.dreambot.api.script.Category;
 import org.dreambot.api.script.ScriptManifest;
 import org.dreambot.api.wrappers.interactive.NPC;
-import org.dreambot.api.methods.world.World;
-import org.dreambot.api.methods.world.Worlds;
-import org.dreambot.api.methods.worldhopper.WorldHopper;
+
 // Mouse speed slowing is attempted via reflection to support multiple API versions
 
 @ScriptManifest(
-        name = "Dommiks Needles",
-        description = "Simple script: Tele Al Kharid, buy 3 needles from Dommik's Crafting Store, hop. repeat, bank, repeat",
-        author = "You",
-        version = 1.1,
-        category = Category.MONEYMAKING
+    name = "Dommiks Needles",
+    description = "Simple script: Tele Al Kharid, buy 3 needles from Dommik's Crafting Store, hop. repeat, bank, repeat",
+    author = "You",
+    version = 1.1,
+    category = Category.MONEYMAKING
 )
 public class DommiksNeedles extends AbstractScript {
 
@@ -41,35 +42,51 @@ public class DommiksNeedles extends AbstractScript {
 
     @Override
     public void onStart() {
-        log("Dommiks Needles started. Will buy 3 per world, then hop. Banking when full.");
+        log(
+            "Dommiks Needles started. Will buy 3 per world, then hop. Banking when full."
+        );
         try {
             // Try a few possible MouseSettings class locations across API versions
             String[] candidates = new String[] {
-                    "org.dreambot.api.input.MouseSettings",
-                    "org.dreambot.api.methods.input.MouseSettings",
-                    "org.dreambot.api.methods.input.mouse.MouseSettings",
-                    "org.dreambot.api.settings.MouseSettings"
+                "org.dreambot.api.input.MouseSettings",
+                "org.dreambot.api.methods.input.MouseSettings",
+                "org.dreambot.api.methods.input.mouse.MouseSettings",
+                "org.dreambot.api.settings.MouseSettings",
             };
             for (String className : candidates) {
                 try {
                     Class<?> cls = Class.forName(className);
                     try {
                         // Prefer static setSpeed(int)
-                        cls.getMethod("setSpeed", int.class).invoke(null, 4);
+                        cls.getMethod("setSpeed", int.class).invoke(null, 8);
                         break;
                     } catch (NoSuchMethodException ignored) {
                         // Try instance-based API: get() or instance() returning settings object
                         try {
                             Object instance = null;
-                            try { instance = cls.getMethod("get").invoke(null); } catch (NoSuchMethodException e) { /* ignore */ }
+                            try {
+                                instance = cls.getMethod("get").invoke(null);
+                            } catch (NoSuchMethodException e) {
+                                /* ignore */
+                            }
                             if (instance == null) {
-                                try { instance = cls.getMethod("instance").invoke(null); } catch (NoSuchMethodException e) { /* ignore */ }
+                                try {
+                                    instance = cls
+                                        .getMethod("instance")
+                                        .invoke(null);
+                                } catch (NoSuchMethodException e) {
+                                    /* ignore */
+                                }
                             }
                             if (instance != null) {
-                                cls.getMethod("setSpeed", int.class).invoke(instance, 4);
+                                cls
+                                    .getMethod("setSpeed", int.class)
+                                    .invoke(instance, 8);
                                 break;
                             }
-                        } catch (Throwable ignored2) { /* continue to next candidate */ }
+                        } catch (Throwable ignored2) {
+                            /* continue to next candidate */
+                        }
                     }
                 } catch (ClassNotFoundException ignored) {
                     // Try next candidate
@@ -106,17 +123,37 @@ public class DommiksNeedles extends AbstractScript {
                 int before = Inventory.count(ITEM_NAME);
                 boolean didBuy;
                 // Always prefer Buy 5 to reduce click count
-                didBuy = Shop.purchaseFive(ITEM_NAME);
+                didBuy = false;
+                try {
+                    // Try modern API: Shop.purchase(String name, int amount)
+                    didBuy = (boolean) Shop.class
+                            .getMethod("purchase", String.class, int.class)
+                            .invoke(null, ITEM_NAME, 5);
+                } catch (Throwable ignored) {
+                    // Fallback to explicit helper if available
+                }
+                if (!didBuy) {
+                    didBuy = Shop.purchaseFive(ITEM_NAME);
+                }
                 if (didBuy) {
-                    sleepUntil(() -> Inventory.count(ITEM_NAME) > before, 50, 1200);
-                    int gained = Math.max(0, Inventory.count(ITEM_NAME) - before);
+                    sleepUntil(
+                        () -> Inventory.count(ITEM_NAME) > before,
+                        50,
+                        1200
+                    );
+                    int gained = Math.max(
+                        0,
+                        Inventory.count(ITEM_NAME) - before
+                    );
                     if (gained > 0) {
                         boughtThisWorld += gained;
                         consecutiveNoGainBuys = 0;
                     } else {
                         consecutiveNoGainBuys++;
                         if (consecutiveNoGainBuys >= 2) {
-                            log("No stock detected after buy attempts; hopping world.");
+                            log(
+                                "No stock detected after buy attempts; hopping world."
+                            );
                             Shop.close();
                             hopWorld();
                             return 300;
@@ -166,7 +203,9 @@ public class DommiksNeedles extends AbstractScript {
     }
 
     private boolean shouldBank() {
-        return Inventory.isFull() || Inventory.count(ITEM_NAME) >= BANK_THRESHOLD;
+        return (
+            Inventory.isFull() || Inventory.count(ITEM_NAME) >= BANK_THRESHOLD
+        );
     }
 
     private boolean openAlKharidBank() {
@@ -179,7 +218,14 @@ public class DommiksNeedles extends AbstractScript {
 
     private void hopWorld() {
         // Hop to a free-to-play, normal world different from the current
-        World target = Worlds.getRandomWorld(w -> w != null && w.isNormal() && !w.isPVP() && !w.isMembers() && w.getWorld() != Client.getCurrentWorld());
+        World target = Worlds.getRandomWorld(
+            w ->
+                w != null &&
+                w.isNormal() &&
+                !w.isPVP() &&
+                !w.isMembers() &&
+                w.getWorld() != Client.getCurrentWorld()
+        );
         if (target != null) {
             log("Hopping to world " + target.getWorld());
             if (WorldHopper.hopWorld(target)) {
