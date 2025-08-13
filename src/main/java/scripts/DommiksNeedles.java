@@ -128,6 +128,10 @@ public class DommiksNeedles extends AbstractScript {
                     hopWorld();
                     return waitMedium();
                 }
+                // Occasionally hover before buying
+                if (rand(0, 4) == 0) { try { item.hover(); } catch (Throwable ignored) {} sleep(rand(60, 180)); }
+                // Occasionally Buy 1 then Buy 5 next tick for variability
+                if (rand(0, 5) == 0) { item.interact("Buy 1"); sleep(rand(100, 200)); }
                 didBuy = item.interact("Buy 5");
                 if (!didBuy) didBuy = item.interact("Buy-5");
                 if (!didBuy) didBuy = item.interact("Buy Five");
@@ -187,10 +191,11 @@ public class DommiksNeedles extends AbstractScript {
         NPC dommik = NPCs.closest(NPC_NAME);
         if (dommik == null) {
             // Walk directly to the shop location and wait for NPC to load
-            if (Walking.shouldWalk(6)) {
+            int walkThreshold = 4 + rand(0, 3); // 4-7
+            if (Walking.shouldWalk(walkThreshold)) {
                 if (Players.getLocal().distance(SHOP_TILE) > 4) {
                     log("Walking to Dommik's Crafting Shop...");
-                    Walking.walk(SHOP_TILE);
+                    Walking.walk(randomShopTile());
                 }
             }
             return waitMedium();
@@ -198,11 +203,16 @@ public class DommiksNeedles extends AbstractScript {
 
         // If NPC is visible, trade; otherwise walk to him
         if (dommik.distance(Players.getLocal()) > 6) {
-            if (Walking.shouldWalk(4)) {
+            int walkThreshold = 3 + rand(0, 3); // 3-6
+            if (Walking.shouldWalk(walkThreshold)) {
                 log("Walking to Dommik...");
                 Walking.walk(dommik);
             }
             return waitMedium();
+        }
+        // Occasionally rotate camera slightly (API yaw/pitch integers)
+        if (rand(0, 24) == 0) {
+            try { org.dreambot.api.methods.input.Camera.rotateTo(rand(0, 2047), rand(320, 380)); } catch (Throwable ignored) {}
         }
         if (dommik.interact("Trade")) {
             log("Opening shop...");
@@ -334,6 +344,14 @@ public class DommiksNeedles extends AbstractScript {
         }
         eligible.sort(java.util.Comparator.comparingInt(World::getWorld));
         return eligible;
+    }
+
+    // Minor random offset around the target shop tile for path variance
+    private Tile randomShopTile() {
+        int dx = rand(-1, 1);
+        int dy = rand(-1, 1);
+        if (dx == 0 && dy == 0) dy = 1; // avoid exact same tile sometimes
+        return new Tile(SHOP_TILE.getX() + dx, SHOP_TILE.getY() + dy, SHOP_TILE.getZ());
     }
 
     // --- Small anti-ban helpers ---
