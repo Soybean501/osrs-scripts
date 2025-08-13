@@ -1,0 +1,19 @@
+# Java/Gradle
+/build/
+.gradle/
+/out/
+/bin/
+*.class
+*.jar
+*.log
+*.iml
+.idea/
+
+# DreamBot artifacts
+DreamBot/
+**/out/
+**/*.jar
+**/*.class
+
+# macOS
+.DS_Store

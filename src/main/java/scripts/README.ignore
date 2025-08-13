@@ -1,0 +1,1 @@
+This directory hosts DreamBot script sources. The build uses compileOnly on the client.jar local to your machine.
