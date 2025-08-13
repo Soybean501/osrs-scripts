@@ -41,6 +41,8 @@ public class DommiksNeedles extends AbstractScript {
     private int boughtThisWorld = 0;
     private int consecutiveNoGainBuys = 0;
     private final java.util.Set<Integer> rejectedWorldIds = new java.util.HashSet<>();
+    private final java.util.Random random = new java.util.Random();
+    private int worldsHoppedCount = 0;
 
     @Override
     public void onStart() {
@@ -59,8 +61,9 @@ public class DommiksNeedles extends AbstractScript {
                 try {
                     Class<?> cls = Class.forName(className);
                     try {
-                        // Prefer static setSpeed(int)
-                        cls.getMethod("setSpeed", int.class).invoke(null, 8);
+                        // Prefer static setSpeed(int) with slight randomization
+                        int speed = 7 + random.nextInt(5); // 7-11
+                        cls.getMethod("setSpeed", int.class).invoke(null, speed);
                         break;
                     } catch (NoSuchMethodException ignored) {
                         // Try instance-based API: get() or instance() returning settings object
@@ -81,9 +84,10 @@ public class DommiksNeedles extends AbstractScript {
                                 }
                             }
                             if (instance != null) {
+                                int speed = 7 + random.nextInt(5); // 7-11
                                 cls
                                     .getMethod("setSpeed", int.class)
-                                    .invoke(instance, 8);
+                                    .invoke(instance, speed);
                                 break;
                             }
                         } catch (Throwable ignored2) {
@@ -103,7 +107,7 @@ public class DommiksNeedles extends AbstractScript {
     public int onLoop() {
         // Wait for login
         if (Players.getLocal() == null) {
-            return 600;
+            return waitMedium();
         }
 
         // Needles stack; never bank for needles
@@ -122,7 +126,7 @@ public class DommiksNeedles extends AbstractScript {
                     log("No needles in stock; hopping world.");
                     Shop.close();
                     hopWorld();
-                    return 600;
+                    return waitMedium();
                 }
                 didBuy = item.interact("Buy 5");
                 if (!didBuy) didBuy = item.interact("Buy-5");
@@ -131,7 +135,7 @@ public class DommiksNeedles extends AbstractScript {
                     log("Buy 5 failed; likely out of stock. Hopping world.");
                     Shop.close();
                     hopWorld();
-                    return 600;
+                    return waitMedium();
                 }
                 if (didBuy) {
                     sleepUntil(() -> Inventory.count(ITEM_NAME) > before, 50, 3000);
@@ -161,22 +165,22 @@ public class DommiksNeedles extends AbstractScript {
                             );
                             Shop.close();
                             hopWorld();
-                            return 300;
+                            return waitShort();
                         }
                     }
                 } else {
                     log("Buy action failed; likely no stock. Hopping world.");
                     Shop.close();
                     hopWorld();
-                    return 300;
+                    return waitShort();
                 }
             }
             if (boughtThisWorld >= BUY_PER_WORLD) {
                 Shop.close();
                 hopWorld();
-                return 600; // pause a bit after hop request
+                return waitMedium(); // pause a bit after hop request
             }
-            return 300;
+            return waitShort();
         }
 
         // Not in shop UI; navigate to Dommik and open shop
@@ -189,7 +193,7 @@ public class DommiksNeedles extends AbstractScript {
                     Walking.walk(SHOP_TILE);
                 }
             }
-            return 400;
+            return waitMedium();
         }
 
         // If NPC is visible, trade; otherwise walk to him
@@ -198,14 +202,14 @@ public class DommiksNeedles extends AbstractScript {
                 log("Walking to Dommik...");
                 Walking.walk(dommik);
             }
-            return 400;
+            return waitMedium();
         }
         if (dommik.interact("Trade")) {
             log("Opening shop...");
             sleepUntil(Shop::isOpen, 50, 3000);
         }
 
-        return 400;
+        return waitShort();
     }
 
     private boolean shouldBank() {
@@ -238,7 +242,6 @@ public class DommiksNeedles extends AbstractScript {
             if (!isEligibleWorld(candidate)) { rejectedWorldIds.add(wid); continue; }
             log("Hopping to world " + wid);
             attempts++;
-            int previousWorld = current;
             if (WorldHopper.hopWorld(candidate)) {
                 // Wait until the client's world actually changes
                 boolean worldChanged = sleepUntil(() -> Client.getCurrentWorld() == wid, 100, 15000);
@@ -250,6 +253,11 @@ public class DommiksNeedles extends AbstractScript {
                 if (worldChanged) {
                     boughtThisWorld = 0;
                     consecutiveNoGainBuys = 0;
+                    worldsHoppedCount++;
+                    // Occasionally idle briefly after a hop
+                    if (worldsHoppedCount % (7 + random.nextInt(6)) == 0) {
+                        sleep(800 + random.nextInt(2200));
+                    }
                     return;
                 }
             }
@@ -258,6 +266,8 @@ public class DommiksNeedles extends AbstractScript {
             current = Client.getCurrentWorld();
         }
         log("Unable to hop after " + attempts + " attempts; will retry later.");
+        // Reset rejected set after a full pass to avoid stale growth
+        rejectedWorldIds.clear();
     }
 
     private boolean isEligibleWorld(World world) {
@@ -296,6 +306,8 @@ public class DommiksNeedles extends AbstractScript {
             if (a.contains("beta")) return false;
             if (a.contains("high risk")) return false;
             if (a.contains("tournament")) return false;
+            if (a.contains("developer")) return false;        // Developer/locked
+            if (a.contains("locked")) return false;           // Locked world
         }
 
         // Finally, avoid selecting the current world
@@ -323,4 +335,12 @@ public class DommiksNeedles extends AbstractScript {
         eligible.sort(java.util.Comparator.comparingInt(World::getWorld));
         return eligible;
     }
+
+    // --- Small anti-ban helpers ---
+    private int rand(int min, int max) {
+        if (max <= min) return min;
+        return min + random.nextInt(max - min + 1);
+    }
+    private int waitShort() { return rand(160, 260); }
+    private int waitMedium() { return rand(300, 600); }
 }

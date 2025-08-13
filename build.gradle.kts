@@ -13,8 +13,13 @@ repositories {
 }
 
 dependencies {
-    // DreamBot client JAR on local filesystem
-    compileOnly(files("/Users/harrytowers/DreamBot/BotData/client.jar"))
+    // DreamBot client JAR on local filesystem, parameterized via gradle property or env
+    // Usage: ./gradlew -PclientJar=/path/to/client.jar build
+    val clientJarPath = (project.findProperty("clientJar") as String?)
+        ?: System.getenv("CLIENT_JAR")
+        ?: System.getProperty("client.jar")
+        ?: "${System.getProperty("user.home")}/DreamBot/BotData/client.jar"
+    compileOnly(files(clientJarPath))
 }
 
 tasks.register<Jar>("helloWorldJar") {
