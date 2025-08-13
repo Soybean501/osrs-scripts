@@ -3,6 +3,7 @@ package scripts;
 import org.dreambot.api.Client;
 import org.dreambot.api.methods.container.impl.Inventory;
 import org.dreambot.api.methods.container.impl.Shop;
+import org.dreambot.api.wrappers.items.Item;
 import org.dreambot.api.methods.container.impl.bank.Bank;
 import org.dreambot.api.methods.container.impl.bank.BankLocation;
 import org.dreambot.api.methods.interactive.NPCs;
@@ -121,30 +122,33 @@ public class DommiksNeedles extends AbstractScript {
             int remaining = BUY_PER_WORLD - boughtThisWorld;
             if (remaining > 0) {
                 int before = Inventory.count(ITEM_NAME);
-                boolean didBuy;
-                // Always prefer Buy 5 to reduce click count
-                didBuy = false;
-                try {
-                    // Try modern API: Shop.purchase(String name, int amount)
-                    didBuy = (boolean) Shop.class
-                            .getMethod("purchase", String.class, int.class)
-                            .invoke(null, ITEM_NAME, 5);
-                } catch (Throwable ignored) {
-                    // Fallback to explicit helper if available
+                boolean didBuy = false;
+                Item item = null;
+                for (Item it : Shop.all()) {
+                    if (it != null && ITEM_NAME.equalsIgnoreCase(it.getName())) { item = it; break; }
                 }
-                if (!didBuy) {
-                    didBuy = Shop.purchaseFive(ITEM_NAME);
+                if (item != null) {
+                    didBuy = item.interact("Buy 5");
+                    if (!didBuy) didBuy = item.interact("Buy-5");
+                    if (!didBuy) didBuy = item.interact("Buy Five");
                 }
                 if (didBuy) {
-                    sleepUntil(
-                        () -> Inventory.count(ITEM_NAME) > before,
-                        50,
-                        1200
-                    );
-                    int gained = Math.max(
-                        0,
-                        Inventory.count(ITEM_NAME) - before
-                    );
+                    sleepUntil(() -> Inventory.count(ITEM_NAME) > before, 50, 3000);
+                    int first = Inventory.count(ITEM_NAME);
+                    long stableSince = System.currentTimeMillis();
+                    long deadline = System.currentTimeMillis() + 2500;
+                    int last = first;
+                    while (System.currentTimeMillis() < deadline) {
+                        sleep(120);
+                        int cur = Inventory.count(ITEM_NAME);
+                        if (cur > last) {
+                            last = cur;
+                            stableSince = System.currentTimeMillis();
+                        } else if (System.currentTimeMillis() - stableSince >= 350) {
+                            break;
+                        }
+                    }
+                    int gained = Math.max(0, last - before);
                     if (gained > 0) {
                         boughtThisWorld += gained;
                         consecutiveNoGainBuys = 0;
