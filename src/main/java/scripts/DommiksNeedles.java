@@ -115,12 +115,22 @@ public class DommiksNeedles extends AbstractScript {
                 boolean didBuy = false;
                 Item item = null;
                 for (Item it : Shop.all()) {
-                    if (it != null && ITEM_NAME.equalsIgnoreCase(it.getName())) { item = it; break; }
+                    if (it != null && ITEM_NAME.equalsIgnoreCase(it.getName()) && it.getAmount() > 0) { item = it; break; }
                 }
-                if (item != null) {
-                    didBuy = item.interact("Buy 5");
-                    if (!didBuy) didBuy = item.interact("Buy-5");
-                    if (!didBuy) didBuy = item.interact("Buy Five");
+                if (item == null) {
+                    log("No needles in stock; hopping world.");
+                    Shop.close();
+                    hopWorld();
+                    return 600;
+                }
+                didBuy = item.interact("Buy 5");
+                if (!didBuy) didBuy = item.interact("Buy-5");
+                if (!didBuy) didBuy = item.interact("Buy Five");
+                if (!didBuy) {
+                    log("Buy 5 failed; likely out of stock. Hopping world.");
+                    Shop.close();
+                    hopWorld();
+                    return 600;
                 }
                 if (didBuy) {
                     sleepUntil(() -> Inventory.count(ITEM_NAME) > before, 50, 3000);
