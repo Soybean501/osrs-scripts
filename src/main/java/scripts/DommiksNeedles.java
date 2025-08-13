@@ -33,7 +33,7 @@ public class DommiksNeedles extends AbstractScript {
     private static final String NPC_NAME = "Dommik";
     private static final Tile SHOP_TILE = new Tile(3318, 3193, 0);
     private static final int BUY_PER_WORLD = 3;
-    private static final int BANK_THRESHOLD = 27; // bank when inventory nearly full
+    private static final int BANK_THRESHOLD = 27; // unused when only banking on full
     private static final BankLocation TARGET_BANK = BankLocation.AL_KHARID;
     private static final int NEAR_BANK_DISTANCE = 25;
     private int exploreStepIndex = 0;
@@ -105,17 +105,7 @@ public class DommiksNeedles extends AbstractScript {
             return 600;
         }
 
-        // Bank if inventory is full or many needles held
-        if (shouldBank()) {
-            if (openAlKharidBank()) {
-                if (Inventory.contains(ITEM_NAME)) {
-                    Bank.depositAll(ITEM_NAME);
-                    sleepUntil(() -> !Inventory.contains(ITEM_NAME), 50, 2000);
-                }
-                Bank.close();
-            }
-            return 400;
-        }
+        // Needles stack; never bank for needles
 
         // If shop is open, buy up to 3 needles for this world
         if (Shop.isOpen()) {
@@ -173,6 +163,7 @@ public class DommiksNeedles extends AbstractScript {
             if (boughtThisWorld >= BUY_PER_WORLD) {
                 Shop.close();
                 hopWorld();
+                return 600; // pause a bit after hop request
             }
             return 300;
         }
@@ -207,9 +198,8 @@ public class DommiksNeedles extends AbstractScript {
     }
 
     private boolean shouldBank() {
-        return (
-            Inventory.isFull() || Inventory.count(ITEM_NAME) >= BANK_THRESHOLD
-        );
+        // Only bank when inventory is actually full
+        return Inventory.isFull();
     }
 
     private boolean openAlKharidBank() {
