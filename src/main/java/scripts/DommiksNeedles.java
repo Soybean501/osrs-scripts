@@ -40,6 +40,7 @@ public class DommiksNeedles extends AbstractScript {
 
     private int boughtThisWorld = 0;
     private int consecutiveNoGainBuys = 0;
+    private final java.util.Set<Integer> rejectedWorldIds = new java.util.HashSet<>();
 
     @Override
     public void onStart() {
@@ -221,24 +222,105 @@ public class DommiksNeedles extends AbstractScript {
     }
 
     private void hopWorld() {
-        // Hop to a free-to-play, normal world different from the current
-        World target = Worlds.getRandomWorld(
-            w ->
-                w != null &&
-                w.isNormal() &&
-                !w.isPVP() &&
-                !w.isMembers() &&
-                w.getWorld() != Client.getCurrentWorld()
-        );
-        if (target != null) {
-            log("Hopping to world " + target.getWorld());
-            if (WorldHopper.hopWorld(target)) {
-                sleepUntil(() -> Players.getLocal() != null, 50, 8000);
-                boughtThisWorld = 0;
-                consecutiveNoGainBuys = 0;
-            }
-        } else {
-            log("No suitable world to hop found.");
+        // Prefer sequential hopping to nearest eligible F2P non-restricted world
+        java.util.List<World> eligible = getEligibleWorlds();
+        if (eligible.isEmpty()) { log("No suitable world to hop found."); return; }
+        int current = Client.getCurrentWorld();
+        int startIndex = 0;
+        for (int i = 0; i < eligible.size(); i++) {
+            if (eligible.get(i).getWorld() > current) { startIndex = i; break; }
         }
+        int attempts = 0;
+        for (int offset = 0; offset < eligible.size(); offset++) {
+            World candidate = eligible.get((startIndex + offset) % eligible.size());
+            int wid = candidate.getWorld();
+            if (wid == current || rejectedWorldIds.contains(wid)) continue;
+            if (!isEligibleWorld(candidate)) { rejectedWorldIds.add(wid); continue; }
+            log("Hopping to world " + wid);
+            attempts++;
+            int previousWorld = current;
+            if (WorldHopper.hopWorld(candidate)) {
+                // Wait until the client's world actually changes
+                boolean worldChanged = sleepUntil(() -> Client.getCurrentWorld() == wid, 100, 15000);
+                if (!worldChanged) {
+                    // Fallback: allow some extra time if login widgets in between
+                    sleep(1000);
+                    worldChanged = (Client.getCurrentWorld() == wid);
+                }
+                if (worldChanged) {
+                    boughtThisWorld = 0;
+                    consecutiveNoGainBuys = 0;
+                    return;
+                }
+            }
+            // Mark as rejected if hop failed or didn't land
+            rejectedWorldIds.add(wid);
+            current = Client.getCurrentWorld();
+        }
+        log("Unable to hop after " + attempts + " attempts; will retry later.");
+    }
+
+    private boolean isEligibleWorld(World world) {
+        if (world == null) return false;
+        // Only consider standard, non-members, non-PvP worlds
+        if (!world.isNormal()) return false;
+        if (world.isMembers()) return false;
+        if (world.isPVP()) return false;
+
+        // Reject if there is any explicit minimum total level requirement
+        try {
+            java.lang.reflect.Method m = World.class.getMethod("getMinimumLevel");
+            Object value = m.invoke(world);
+            if (value instanceof Integer && ((Integer) value) > 0) return false;
+        } catch (Throwable ignored) { /* method may not exist in some API versions */ }
+
+        // Inspect activity text for restrictions
+        String activity = null;
+        try { activity = (String) World.class.getMethod("getActivity").invoke(world); } catch (Throwable ignored) {}
+        if (activity != null && !activity.isEmpty()) {
+            String a = activity.toLowerCase();
+            // Any skill total or total level requirement
+            if (a.contains("skill total")) return false;
+            // Generic "total" with a number (e.g., "1250 total")
+            if (a.contains("total") && a.matches(".*\\b[0-9]{3,4}\\b.*")) return false;
+            // Known restricted styles
+            if (a.contains("pvp")) return false;              // PvP, PK, Arena variants
+            if (a.contains("wilderness")) return false;       // Wilderness PK worlds
+            if (a.contains(" pk")) return false;              // any ' PK' marker
+            if (a.contains("arena")) return false;            // PvP Arena (legacy or not)
+            if (a.contains("deadman")) return false;
+            if (a.contains("bounty")) return false;           // Bounty Hunter
+            if (a.contains("lms")) return false;              // LMS casual/competitive
+            if (a.contains("speedrunning")) return false;
+            if (a.contains("fresh start")) return false;
+            if (a.contains("beta")) return false;
+            if (a.contains("high risk")) return false;
+            if (a.contains("tournament")) return false;
+        }
+
+        // Finally, avoid selecting the current world
+        return world.getWorld() != Client.getCurrentWorld();
+    }
+
+    private java.util.List<World> getEligibleWorlds() {
+        java.util.List<World> worlds = null;
+        try { worlds = (java.util.List<World>) Worlds.class.getMethod("getWorlds").invoke(null); } catch (Throwable ignored) {}
+        if (worlds == null) {
+            worlds = new java.util.ArrayList<>();
+            for (int w = 301; w <= 628; w++) {
+                World wo = Worlds.getWorld(w);
+                if (wo != null) worlds.add(wo);
+            }
+        }
+        java.util.List<World> eligible = new java.util.ArrayList<>();
+        for (World w : worlds) {
+            try {
+                if (isEligibleWorld(w)) eligible.add(w);
+            } catch (Throwable t) {
+                // Defensive: skip any world that triggers API issues
+            }
+        }
+        eligible.sort(java.util.Comparator.comparingInt(World::getWorld));
+        return eligible;
     }
 }
